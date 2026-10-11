@@ -22,9 +22,11 @@ def prepare_csv_data():
         df["has_at"] = df["URL"].str.contains("@", regex=False).astype(int)
         df["login"] = df["URL"].str.contains("login").astype(int)
         df["secure"] = df["URL"].str.contains("secure").astype(int)
+        df["digit_count"] = df["URL"].str.count(r"\d")
+        df["http_vs_https"] = df["URL"].str.startswith("https")
 
         #Data frame of the features the model will learn from
-        X = df[["url_length", "slash_count", "dot_count", "hyphen_count", "has_at" , "login" , "secure"]]
+        X = df[["url_length", "slash_count", "dot_count", "hyphen_count", "has_at" , "login" , "secure" , "digit_count" , "http_vs_https"]]
 
         #Encode the label (target)
         le = LabelEncoder()
@@ -55,7 +57,7 @@ def run_RFC():
     )
 
     #Initialize and train the model
-    rfc = RandomForestClassifier(n_estimators=100, class_weight="balanced" ,random_state=42)
+    rfc = RandomForestClassifier(n_estimators=300, class_weight="balanced" ,random_state=42)
     rfc.fit(X_train, y_train)
 
     #Predict on the unseen test data
@@ -64,6 +66,7 @@ def run_RFC():
     #Evaluate
     print(f"Model Accuracy: {accuracy_score(y_test, y_pred):.4f}")
     print(classification_report(y_test, y_pred))
+    print(f"Train accuracy: {rfc.score(X_train, y_train):.4f}")
 
     #See which features the model relied on
     for name, score in zip(X.columns, rfc.feature_importances_):
