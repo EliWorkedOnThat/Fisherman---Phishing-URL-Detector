@@ -31,13 +31,19 @@ def prepare_csv_data():
         df["hyphen_count"] = df["URL"].str.count("-")
 
         #Create a seperate column to check the presence of @ in a URL
-        df["any_@"] = df["URL"].str.contains("@")
+        df["has_at"] = df["URL"].str.contains("@").astype(int)
+
+        #Creating Data Frame of the parameters we are looking for
+        X = df[["url_length" , "slash_count" , "dot_count" , "hyphen_count" , "has_at"]]
 
         #Creating an instance of label encoder
         le = LabelEncoder()
 
         #Returning encoded label from our data
         y = le.fit_transform(df["Label"])
+
+        #Return
+        return X, y
 
     except Exception as e:
         print(f"[Error]:Failed to process data:{e}")
