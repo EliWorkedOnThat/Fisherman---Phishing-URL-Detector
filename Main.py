@@ -25,7 +25,13 @@ def prepare_csv_data():
         df["slash_count"] = df["URL"].str.count("/")
 
         #Create a seperate column to count "." appearence in a URL
-        df["dot_count"] = df["URL"].str.count(".")
+        df["dot_count"] = df["URL"].str.count(r"\.")
+
+        #Create a seperate column to count "-" appearence in a URL
+        df["hyphen_count"] = df["URL"].str.count("-")
+
+        #Create a seperate column to check the presence of @ in a URL
+        df["any_@"] = df["URL"].str.contains("@")
 
         #Creating an instance of label encoder
         le = LabelEncoder()
