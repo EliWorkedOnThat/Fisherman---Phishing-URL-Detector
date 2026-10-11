@@ -1,5 +1,6 @@
 #Imports and Modules
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 import matplotlib
 from sklearn.model_selection import train_test_split
@@ -17,9 +18,20 @@ def prepare_csv_data():
         #Drop any missing values if any do exist
         df = df.dropna()
 
-        #Convert string categorical data into numeric data for the RFC to learn
-        df = pd.get_dummies(df["Label"])
-        df= pd.get_dummies(df["URL"])
+        #Create a seperate column for URL length to analyze as a feature
+        df["url_length"] = df["URL"].str.len()
+
+        #Create a seperate column to count "/" appearence in a URL
+        df["slash_count"] = df["URL"].str.count("/")
+
+        #Create a seperate column to count "." appearence in a URL
+        df["dot_count"] = df["URL"].str.count(".")
+
+        #Creating an instance of label encoder
+        le = LabelEncoder()
+
+        #Returning encoded label from our data
+        y = le.fit_transform(df["Label"])
 
     except Exception as e:
         print(f"[Error]:Failed to process data:{e}")
