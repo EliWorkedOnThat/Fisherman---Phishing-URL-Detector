@@ -2,12 +2,8 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
-import matplotlib
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
-
-#Initializing Random Forest Classifier
-RFC = RandomForestClassifier(random_state = 0)
 
 #Function to read the CSV Data and process it
 def prepare_csv_data():
@@ -18,32 +14,60 @@ def prepare_csv_data():
         #Drop any missing values if any do exist
         df = df.dropna()
 
-        #Create a seperate column for URL length to analyze as a feature
+        #Feature columns built from the URL text
         df["url_length"] = df["URL"].str.len()
-
-        #Create a seperate column to count "/" appearence in a URL
         df["slash_count"] = df["URL"].str.count("/")
-
-        #Create a seperate column to count "." appearence in a URL
         df["dot_count"] = df["URL"].str.count(r"\.")
-
-        #Create a seperate column to count "-" appearence in a URL
         df["hyphen_count"] = df["URL"].str.count("-")
+        df["has_at"] = df["URL"].str.contains("@", regex=False).astype(int)
+        df["login"] = df["URL"].str.contains("login").astype(int)
+        df["secure"] = df["URL"].str.contains("secure").astype(int)
 
-        #Create a seperate column to check the presence of @ in a URL
-        df["has_at"] = df["URL"].str.contains("@").astype(int)
+        #Data frame of the features the model will learn from
+        X = df[["url_length", "slash_count", "dot_count", "hyphen_count", "has_at" , "login" , "secure"]]
 
-        #Creating Data Frame of the parameters we are looking for
-        X = df[["url_length" , "slash_count" , "dot_count" , "hyphen_count" , "has_at"]]
-
-        #Creating an instance of label encoder
+        #Encode the label (target)
         le = LabelEncoder()
-
-        #Returning encoded label from our data
         y = le.fit_transform(df["Label"])
 
-        #Return
+        print(f"Classes: {list(le.classes_)}")
+        print(df["Label"].value_counts())
+
         return X, y
 
     except Exception as e:
         print(f"[Error]:Failed to process data:{e}")
+        raise  # re-raise so the real error shows instead of returning None
+
+#Function to run the RFC
+def run_RFC():
+
+    #Load the prepared data
+    X, y = prepare_csv_data()
+
+    #Split into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y
+    )
+
+    #Initialize and train the model
+    rfc = RandomForestClassifier(n_estimators=100, class_weight="balanced" ,random_state=42)
+    rfc.fit(X_train, y_train)
+
+    #Predict on the unseen test data
+    y_pred = rfc.predict(X_test)
+
+    #Evaluate
+    print(f"Model Accuracy: {accuracy_score(y_test, y_pred):.4f}")
+    print(classification_report(y_test, y_pred))
+
+    #See which features the model relied on
+    for name, score in zip(X.columns, rfc.feature_importances_):
+        print(f"{name}: {score:.3f}")
+
+if __name__ == "__main__":
+    run_RFC()
