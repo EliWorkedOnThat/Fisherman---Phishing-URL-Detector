@@ -23,10 +23,10 @@ def prepare_csv_data():
         df["login"] = df["URL"].str.contains("login").astype(int)
         df["secure"] = df["URL"].str.contains("secure").astype(int)
         df["digit_count"] = df["URL"].str.count(r"\d")
-        df["http_vs_https"] = df["URL"].str.startswith("https")
+        df["digit_ratio"] = df["digit_count"] / df["url_length"]
 
         #Data frame of the features the model will learn from
-        X = df[["url_length", "slash_count", "dot_count", "hyphen_count", "has_at" , "login" , "secure" , "digit_count" , "http_vs_https"]]
+        X = df[["url_length", "slash_count", "dot_count", "hyphen_count", "has_at" , "login" , "secure" , "digit_count" , "digit_ratio" ]]
 
         #Encode the label (target)
         le = LabelEncoder()
@@ -57,7 +57,7 @@ def run_RFC():
     )
 
     #Initialize and train the model
-    rfc = RandomForestClassifier(n_estimators=300, class_weight="balanced" ,random_state=42)
+    rfc = RandomForestClassifier(n_estimators=100, class_weight="balanced" ,random_state=42)
     rfc.fit(X_train, y_train)
 
     #Predict on the unseen test data
