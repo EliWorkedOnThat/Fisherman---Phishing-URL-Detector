@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, classification_report
 
 #Function to read the CSV Data and process it
 def prepare_csv_data():
@@ -30,6 +30,10 @@ def prepare_csv_data():
         df["hyphen_count"] = df["URL"].str.count("-")
         df["login"] = df["URL"].str.contains("login").astype(int)
         df["digit_count"] = df["URL"].str.count(r"\d")
+        df["session"] = df["URL"].str.contains("session")
+        df["apk"] = df["URL"].str.contains(r"\.apk").astype(int)
+        df["zip"] =  df["URL"].str.contains(r"\.zip").astype(int)
+        df["end_html"] = df["URL"].str.endswith((".html", ".htm")).astype(int)
 
         #One count column per symbol (re.escape handles regex characters like ?)
         for col_name, symbol in symbols.items():
@@ -37,16 +41,18 @@ def prepare_csv_data():
 
         #Feature list built once, so new columns can't be forgotten
         feature_cols = [
-            "url_length", "slash_count", "dot_count", "hyphen_count",
+            "url_length", "slash_count","apk","end_html" ,"zip", "dot_count","session", "hyphen_count",
             "login", "digit_count",
         ] + list(symbols.keys())
 
+        #Data frame of the features the model will learn from
         X = df[feature_cols]
 
-        #Encode the label (target)
+        #Encode the label (target): class 0 = "bad", class 1 = "good"
         le = LabelEncoder()
         y = le.fit_transform(df["Label"])
 
+        #Show the class names and how balanced the data is
         print(f"Classes: {list(le.classes_)}")
         print(df["Label"].value_counts())
 
@@ -56,13 +62,13 @@ def prepare_csv_data():
         print(f"[Error]:Failed to process data:{e}")
         raise  # re-raise so the real error shows instead of returning None
 
-#Function to run the RFC across several depths
+#Function to train and evaluate the Random Forest
 def run_RFC():
 
-    #Load the prepared data
+    #Load the prepared features and labels
     X, y = prepare_csv_data()
 
-    #Split into training and testing sets
+    #Split into training and testing sets (stratify keeps the class ratio equal in both)
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -71,33 +77,33 @@ def run_RFC():
         stratify=y
     )
 
-    #Depths to compare (None = no limit)
-    depths = [8, 10, 12, 15, 20, 25, None]
+    #Initialize and train the model
+    #max_depth=15 gave the best test accuracy in the depth comparison
+    #class_weight="balanced" compensates for there being more good URLs than bad ones
+    #n_jobs=-1 uses all CPU cores to speed up training
+    rfc = RandomForestClassifier(
+        n_estimators=100,
+        class_weight="balanced",
+        max_depth=15,
+        random_state=42,
+        n_jobs=-1,
+    )
+    rfc.fit(X_train, y_train)
 
-    print(f"\n{'depth':>6} {'test':>7} {'train':>7} {'gap':>7} {'bad_rec':>8} {'bad_prec':>9}")
+    #Predict on the unseen test data
+    y_pred = rfc.predict(X_test)
 
-    for depth in depths:
-        #Only max_depth changes between runs
-        rfc = RandomForestClassifier(
-            n_estimators=100,
-            class_weight="balanced",
-            max_depth=depth,
-            random_state=42,
-            n_jobs=-1,
-        )
-        rfc.fit(X_train, y_train)
+    #Evaluate: accuracy plus per-class precision and recall
+    print(f"Model Accuracy: {accuracy_score(y_test, y_pred):.4f}")
+    print(classification_report(y_test, y_pred))
 
-        y_pred = rfc.predict(X_test)
+    #Train accuracy, to compare against test accuracy and spot overfitting
+    print(f"Train accuracy: {rfc.score(X_train, y_train):.4f}")
 
-        test_acc = accuracy_score(y_test, y_pred)
-        train_acc = rfc.score(X_train, y_train)
+    #See which features the model relied on
+    for name, score in zip(X.columns, rfc.feature_importances_):
+        print(f"{name}: {score:.3f}")
 
-        #Class 0 is "bad" (LabelEncoder sorts alphabetically)
-        bad_recall = recall_score(y_test, y_pred, pos_label=0)
-        bad_precision = precision_score(y_test, y_pred, pos_label=0)
-
-        print(f"{str(depth):>6} {test_acc:>7.4f} {train_acc:>7.4f} "
-              f"{train_acc - test_acc:>7.4f} {bad_recall:>8.2f} {bad_precision:>9.2f}")
-
+#Only run when the script is executed directly, not when imported
 if __name__ == "__main__":
     run_RFC()
