@@ -1,9 +1,10 @@
 #Imports and Modules
+import re
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 
 #Function to read the CSV Data and process it
 def prepare_csv_data():
@@ -14,19 +15,33 @@ def prepare_csv_data():
         #Drop any missing values if any do exist
         df = df.dropna()
 
+        #Symbols to count, mapped to safe column names
+        symbols = {
+            "question_count": "?",
+            "equals_count": "=",
+            "ampersand_count": "&",
+            "percent_count": "%",
+        }
+
         #Feature columns built from the URL text
         df["url_length"] = df["URL"].str.len()
         df["slash_count"] = df["URL"].str.count("/")
         df["dot_count"] = df["URL"].str.count(r"\.")
         df["hyphen_count"] = df["URL"].str.count("-")
-        df["has_at"] = df["URL"].str.contains("@", regex=False).astype(int)
         df["login"] = df["URL"].str.contains("login").astype(int)
-        df["secure"] = df["URL"].str.contains("secure").astype(int)
         df["digit_count"] = df["URL"].str.count(r"\d")
-        df["digit_ratio"] = df["digit_count"] / df["url_length"]
 
-        #Data frame of the features the model will learn from
-        X = df[["url_length", "slash_count", "dot_count", "hyphen_count", "has_at" , "login" , "secure" , "digit_count" , "digit_ratio" ]]
+        #One count column per symbol (re.escape handles regex characters like ?)
+        for col_name, symbol in symbols.items():
+            df[col_name] = df["URL"].str.count(re.escape(symbol))
+
+        #Feature list built once, so new columns can't be forgotten
+        feature_cols = [
+            "url_length", "slash_count", "dot_count", "hyphen_count",
+            "login", "digit_count",
+        ] + list(symbols.keys())
+
+        X = df[feature_cols]
 
         #Encode the label (target)
         le = LabelEncoder()
@@ -41,7 +56,7 @@ def prepare_csv_data():
         print(f"[Error]:Failed to process data:{e}")
         raise  # re-raise so the real error shows instead of returning None
 
-#Function to run the RFC
+#Function to run the RFC across several depths
 def run_RFC():
 
     #Load the prepared data
@@ -56,21 +71,33 @@ def run_RFC():
         stratify=y
     )
 
-    #Initialize and train the model
-    rfc = RandomForestClassifier(n_estimators=100, class_weight="balanced" ,random_state=42)
-    rfc.fit(X_train, y_train)
+    #Depths to compare (None = no limit)
+    depths = [8, 10, 12, 15, 20, 25, None]
 
-    #Predict on the unseen test data
-    y_pred = rfc.predict(X_test)
+    print(f"\n{'depth':>6} {'test':>7} {'train':>7} {'gap':>7} {'bad_rec':>8} {'bad_prec':>9}")
 
-    #Evaluate
-    print(f"Model Accuracy: {accuracy_score(y_test, y_pred):.4f}")
-    print(classification_report(y_test, y_pred))
-    print(f"Train accuracy: {rfc.score(X_train, y_train):.4f}")
+    for depth in depths:
+        #Only max_depth changes between runs
+        rfc = RandomForestClassifier(
+            n_estimators=100,
+            class_weight="balanced",
+            max_depth=depth,
+            random_state=42,
+            n_jobs=-1,
+        )
+        rfc.fit(X_train, y_train)
 
-    #See which features the model relied on
-    for name, score in zip(X.columns, rfc.feature_importances_):
-        print(f"{name}: {score:.3f}")
+        y_pred = rfc.predict(X_test)
+
+        test_acc = accuracy_score(y_test, y_pred)
+        train_acc = rfc.score(X_train, y_train)
+
+        #Class 0 is "bad" (LabelEncoder sorts alphabetically)
+        bad_recall = recall_score(y_test, y_pred, pos_label=0)
+        bad_precision = precision_score(y_test, y_pred, pos_label=0)
+
+        print(f"{str(depth):>6} {test_acc:>7.4f} {train_acc:>7.4f} "
+              f"{train_acc - test_acc:>7.4f} {bad_recall:>8.2f} {bad_precision:>9.2f}")
 
 if __name__ == "__main__":
     run_RFC()
